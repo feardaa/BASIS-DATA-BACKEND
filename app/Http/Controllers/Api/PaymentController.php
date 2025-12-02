@@ -20,23 +20,37 @@ class PaymentController extends Controller
     public function index(): JsonResponse
     {
         try {
-            // Menggunakan Eloquent dengan eager loading relasi ke Order dan User
+            // Eager loading: Pastikan kolom foreign key di 'order' ('id_order', 'id_user') disertakan.
+            // Pastikan 'order.user' juga di-load dengan kolom yang dibutuhkan ('id_users', 'nama').
             $payments = Payment::with([
-                'order:id_order,id_user,status,tanggal_pesan',
-                'order.user:id_users,nama' // Chain loading ke User melalui Order
+                'order:id_order,id_user,status,tanggal_pesan', // Pastikan id_user ada di tabel orders
+                'order.user:id_users,nama' // Pastikan id_users dan nama ada di tabel users
             ])
             ->get();
 
             // Transformasi data untuk presentasi yang lebih baik
             $formattedPayments = $payments->map(function ($payment) {
+                
+                $orderData = $payment->order;
+                $customerName = 'N/A';
+                $tanggalOrder = null;
+
+                // FIX: Menggunakan operator Nullsafe (?) yang lebih modern 
+                // (tersedia di PHP 8.0+) untuk mencegah error jika order atau user null.
+                if ($orderData) {
+                    $tanggalOrder = $orderData->tanggal_pesan;
+                    // Mengakses user melalui order, menggunakan Nullsafe operator (?)
+                    $customerName = $orderData->user?->nama ?? 'N/A (User Dihapus)';
+                }
+                
                 return [
                     'id_payment' => $payment->id_payment,
                     'id_order' => $payment->id_order,
-                    'customer_name' => $payment->order->user->nama ?? 'N/A',
+                    'customer_name' => $customerName, 
                     'jumlah' => $payment->jumlah,
                     'metode' => $payment->metode,
                     'status' => $payment->status,
-                    'tanggal_order' => $payment->order->tanggal_pesan ?? null,
+                    'tanggal_order' => $tanggalOrder,
                     'tanggal_bayar' => $payment->tanggal_bayar,
                     'created_at' => $payment->created_at,
                 ];
@@ -49,9 +63,13 @@ class PaymentController extends Controller
             ]);
 
         } catch (\Exception $e) {
+            // Log error untuk debugging di server
+            \Illuminate\Support\Facades\Log::error("Payment Index Error: " . $e->getMessage(), ['exception' => $e]);
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal mengambil daftar pembayaran',
+                // Tampilkan pesan error detail hanya jika APP_DEBUG=true
                 'error' => env('APP_DEBUG') ? $e->getMessage() : 'Terjadi kesalahan server'
             ], 500);
         }
@@ -87,6 +105,7 @@ class PaymentController extends Controller
             ]);
 
         } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error("Payment Show Error: " . $e->getMessage(), ['exception' => $e]);
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal mengambil detail pembayaran',
@@ -166,6 +185,7 @@ class PaymentController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+            \Illuminate\Support\Facades\Log::error("Payment Update Error: " . $e->getMessage(), ['exception' => $e]);
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal memperbarui status pembayaran',

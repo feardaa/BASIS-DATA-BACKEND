@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AdminAuthController;
+use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\ServiceController;
 use App\Http\Controllers\Api\PaymentController;
@@ -165,7 +166,7 @@ Route::get('/auto-create-tables', function () {
         } else {
             $results['admin'] = 'Table already exists';
         }
-        
+
         // Create drivers table if not exists
         if (!Schema::hasTable('drivers')) {
             DB::statement("
@@ -182,7 +183,7 @@ Route::get('/auto-create-tables', function () {
                     UNIQUE KEY `drivers_email_unique` (`email`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             ");
-            
+
             DB::table('drivers')->insert([
                 [
                     'nama' => 'Joko Antar',
@@ -199,7 +200,7 @@ Route::get('/auto-create-tables', function () {
         } else {
             $results['drivers'] = 'Table already exists';
         }
-        
+
         // Create delivery_zones table if not exists
         if (!Schema::hasTable('delivery_zones')) {
             DB::statement("
@@ -213,7 +214,7 @@ Route::get('/auto-create-tables', function () {
                     PRIMARY KEY (`id`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             ");
-            
+
             DB::table('delivery_zones')->insert([
                 ['nama_zona' => 'Area A (Pusat Kota)', 'biaya_kirim' => 10000.00, 'estimasi_waktu' => '1-2 jam', 'created_at' => now(), 'updated_at' => now()],
                 ['nama_zona' => 'Area B (Pinggiran)', 'biaya_kirim' => 15000.00, 'estimasi_waktu' => '2-3 jam', 'created_at' => now(), 'updated_at' => now()],
@@ -274,11 +275,11 @@ Route::get('/auto-create-tables', function () {
                     KEY `orders_id_delivery_zone_foreign` (`id_delivery_zone`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             ");
-            
+
             DB::table('orders')->insert([
                 [
                     'id_user' => 1,
-                    'kode_order' => 'LNDR-'.time().'001',
+                    'kode_order' => 'LNDR-' . time() . '001',
                     'tanggal_masuk' => now()->toDateString(),
                     'tanggal_selesai_estimasi' => now()->addDays(3)->toDateString(),
                     'id_driver' => 1,
@@ -297,7 +298,7 @@ Route::get('/auto-create-tables', function () {
         } else {
             $results['orders'] = 'Table already exists';
         }
-        
+
         // Create order_item table if not exists
         if (!Schema::hasTable('order_item')) {
             DB::statement("
@@ -315,7 +316,7 @@ Route::get('/auto-create-tables', function () {
                     KEY `order_item_id_service_foreign` (`id_service`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             ");
-            
+
             DB::table('order_item')->insert([
                 [
                     'id_order' => 1,
@@ -332,7 +333,7 @@ Route::get('/auto-create-tables', function () {
         } else {
             $results['order_item'] = 'Table already exists';
         }
-        
+
         // Create payments table if not exists
         if (!Schema::hasTable('payments')) {
             DB::statement("
@@ -351,12 +352,12 @@ Route::get('/auto-create-tables', function () {
                     KEY `payments_id_user_foreign` (`id_user`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             ");
-            
+
             DB::table('payments')->insert([
                 [
                     'id_order' => 1,
                     'id_user' => 1,
-                    'kode_transaksi' => 'TX-'.time().'001',
+                    'kode_transaksi' => 'TX-' . time() . '001',
                     'jumlah_bayar' => 24000.00,
                     'metode' => 'cash',
                     'status_pembayaran' => 'pending',
@@ -404,7 +405,7 @@ Route::get('/auto-create-tables', function () {
                     KEY `notifications_id_user_foreign` (`id_user`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             ");
-            
+
             DB::table('notifications')->insert([
                 [
                     'id_user' => 1,
@@ -593,6 +594,22 @@ Route::post('/admin/orders/{id}/items', [OrderController::class, 'addOrderItems'
 Route::post('/register', [UsersOrderController::class, 'register']); // Mengaitkan POST api/register
 Route::post('/login', [UsersOrderController::class, 'login']);      // Mengaitkan POST api/login
 
+// Mendapatkan daftar SEMUA Order (GET - Khusus Admin/Staff)
+Route::get('/orders/all', [OrderController::class, 'index'])->middleware('auth:sanctum'); // <<< TAMBAHKAN INI
+
+// Membuat Order Baru (POST - Khusus User)
+Route::post('/orders', [OrderController::class, 'store'])->middleware('auth:sanctum');
+
+// Mendapatkan detail Order (GET)
+Route::get('/orders/{id}', [OrderController::class, 'show']);
+
+// Mendapatkan daftar Order untuk user tertentu (GET - Khusus User)
+Route::get('/orders/user/{id_user}', [OrderController::class, 'indexByUser'])->middleware('auth:sanctum');
+
+// Mengubah status Order (PUT/PATCH - Khusus Admin/Staff)
+Route::put('/orders/{id}/status', [OrderController::class, 'updateStatus'])->middleware('auth:sanctum');
+
+
 // ==================== LAUNDRY SERVICES API ====================
 
 // Mendapatkan semua layanan (GET)
@@ -665,10 +682,14 @@ Route::get('/driver/orders/{id_driver}', [DriverController::class, 'getAssignedO
 
 // Mendapatkan detail profil user (GET)
 Route::get('/user/profile/{id}', [UsersOrderController::class, 'show']);
+//login users 
+Route::post('/register', [AuthController::class, 'register']); // <<< PASTIKAN INI
 
+Route::post('/login', [AuthController::class, 'login']);
 // Memperbarui profil user (PUT)
 Route::put('/user/profile/{id}', [UsersOrderController::class, 'update']);
-
+// get users
+Route::get('/users', [UsersOrderController::class, 'index']);
 // Memperbarui password user (PUT)
 Route::put('/user/password/{id}', [UsersOrderController::class, 'updatePassword']);
 
