@@ -9,13 +9,17 @@ class LaundryService extends Model
 {
     use HasFactory;
 
-    protected $primaryKey = 'id_laundry_service';
+    // Primary Key disesuaikan
+    protected $primaryKey = 'id_service'; 
     protected $table = 'laundry_services';
-    public $timestamps = false; // Asumsi tidak ada timestamps
+    public $timestamps = false; // Disesuaikan
 
+    // Kolom fillable disesuaikan
     protected $fillable = [
-        'nama_layanan',
-        'harga_per_kg',
-        'deskripsi',
+        'nama_service', 
+        'kategori', 
+        'harga', 
+        'tipe_harga', 
+        'estimasi_hari',
     ];
 }
