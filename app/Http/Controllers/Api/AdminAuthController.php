@@ -13,111 +13,115 @@ class AdminAuthController extends Controller
     /**
      * Register a new admin
      */
-public function register(Request $request)
-{
-    \Log::info('Admin Register Request:', $request->all());
-    
-    try {
-        // Validasi input
-        $validator = Validator::make($request->all(), [
-            'nama' => 'required|string|max:100',
-            'email' => 'required|email|unique:admin,email',
-            'password' => 'required|string|min:6',
-            'no_handphone' => 'nullable|string|max:15',
-            'alamat' => 'nullable|string',
-            'role' => 'required|in:admin,staff'
-        ]);
+    public function register(Request $request)
+    {
+        \Log::info('Admin Register Request:', $request->all());
 
-        if ($validator->fails()) {
-            \Log::error('Validation failed:', $validator->errors()->toArray());
+        try {
+            // Validasi input
+            $validator = Validator::make($request->all(), [
+                'nama' => 'required|string|max:100',
+                // Pastikan email unik di tabel 'admin'
+                'email' => 'required|email|unique:admin,email',
+                'password' => 'required|string|min:6',
+                'no_handphone' => 'nullable|string|max:15',
+                'alamat' => 'nullable|string',
+                'role' => 'required|in:admin,staff'
+            ]);
+
+            if ($validator->fails()) {
+                \Log::error('Validation failed:', $validator->errors()->toArray());
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validasi gagal',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            \Log::info('Creating admin with data:', [
+                'nama' => $request->nama,
+                'email' => $request->email,
+                'has_password' => !empty($request->password)
+            ]);
+
+            // Buat admin baru
+            $adminData = [
+                'nama' => $request->nama,
+                'email' => $request->email,
+                'password' => Hash::make($request->password),
+                'role' => $request->role,
+                'created_at' => now(),
+                'updated_at' => now()
+            ];
+
+            // Tambahkan kolom opsional jika ada
+            if ($request->has('no_handphone') && !empty($request->no_handphone)) {
+                $adminData['no_handphone'] = $request->no_handphone;
+            }
+
+            if ($request->has('alamat') && !empty($request->alamat)) {
+                $adminData['alamat'] = $request->alamat;
+            }
+
+            \Log::info('Admin data to insert:', $adminData);
+
+            // Coba insert data
+            $adminId = DB::table('admin')->insertGetId($adminData);
+            \Log::info('Admin created with ID:', ['id' => $adminId]);
+
+            // Ambil data admin yang baru dibuat
+            $admin = DB::table('admin')->where('id', $adminId)->first();
+
+            if (!$admin) {
+                \Log::error('Admin not found after creation:', ['id' => $adminId]);
+                throw new \Exception('Admin tidak ditemukan setelah dibuat');
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Admin berhasil didaftarkan',
+                'data' => [
+                    'id' => $admin->id,
+                    'nama' => $admin->nama,
+                    'email' => $admin->email,
+                    'no_handphone' => $admin->no_handphone ?? null,
+                    'alamat' => $admin->alamat ?? null,
+                    'role' => $admin->role,
+                    'created_at' => $admin->created_at
+                ]
+            ], 201);
+
+        } catch (\Illuminate\Database\QueryException $e) {
+            \Log::error('Database error in admin register:', [
+                'message' => $e->getMessage(),
+                'code' => $e->getCode(),
+                'sql' => $e->getSql(),
+                'bindings' => $e->getBindings()
+            ]);
+
             return response()->json([
                 'success' => false,
-                'message' => 'Validasi gagal',
-                'errors' => $validator->errors()
-            ], 422);
+                'message' => 'Database error: ' . $e->getMessage(),
+                'error_code' => $e->getCode()
+            ], 500);
+
+        } catch (\Exception $e) {
+            \Log::error('General error in admin register:', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Pendaftaran admin gagal: ' . $e->getMessage(),
+                'error' => $e->getMessage(),
+                'trace' => env('APP_DEBUG') ? $e->getTraceAsString() : null
+            ], 500);
         }
-
-        \Log::info('Creating admin with data:', [
-            'nama' => $request->nama,
-            'email' => $request->email,
-            'has_password' => !empty($request->password)
-        ]);
-
-        // Buat admin baru
-        $adminData = [
-            'nama' => $request->nama,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-            'role' => $request->role,
-            'created_at' => now(),
-            'updated_at' => now()
-        ];
-
-        // Tambahkan kolom opsional jika ada
-        if ($request->has('no_handphone') && !empty($request->no_handphone)) {
-            $adminData['no_handphone'] = $request->no_handphone;
-        }
-        
-        if ($request->has('alamat') && !empty($request->alamat)) {
-            $adminData['alamat'] = $request->alamat;
-        }
-
-        \Log::info('Admin data to insert:', $adminData);
-
-        // Coba insert data
-        $adminId = DB::table('admin')->insertGetId($adminData);
-        \Log::info('Admin created with ID:', ['id' => $adminId]);
-
-        // Ambil data admin yang baru dibuat
-        $admin = DB::table('admin')->where('id', $adminId)->first();
-        
-        if (!$admin) {
-            \Log::error('Admin not found after creation:', ['id' => $adminId]);
-            throw new \Exception('Admin tidak ditemukan setelah dibuat');
-        }
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Admin berhasil didaftarkan',
-            'data' => [
-                'id' => $admin->id,
-                'nama' => $admin->nama,
-                'email' => $admin->email,
-                'no_handphone' => $admin->no_handphone ?? null,
-                'alamat' => $admin->alamat ?? null,
-                'role' => $admin->role,
-                'created_at' => $admin->created_at
-            ]
-        ], 201);
-
-    } catch (\Illuminate\Database\QueryException $e) {
-        \Log::error('Database error in admin register:', [
-            'message' => $e->getMessage(),
-            'code' => $e->getCode(),
-            'sql' => $e->getSql(),
-            'bindings' => $e->getBindings()
-        ]);
-        
-        return response()->json([
-            'success' => false,
-            'message' => 'Database error: ' . $e->getMessage(),
-            'error_code' => $e->getCode()
-        ], 500);
-        
-    } catch (\Exception $e) {
-        \Log::error('General error in admin register:', [
-            'message' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
-        ]);
-        
-        return response()->json([
-            'success' => false,
-            'message' => 'Pendaftaran admin gagal: ' . $e->getMessage(),
-            'error' => $e->getMessage(),
-            'trace' => env('APP_DEBUG') ? $e->getTraceAsString() : null
-        ], 500);
     }
-}
+
+    // -------------------------------------------------------------------------------- //
+
     /**
      * Login admin
      */
@@ -125,7 +129,7 @@ public function register(Request $request)
     {
         try {
             // Cek jika tabel admin ada
-            if (!Schema::hasTable('admin')) { // PERUBAHAN: 'admin' bukan 'admins'
+            if (!Schema::hasTable('admin')) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Tabel admin tidak ditemukan',
@@ -148,7 +152,7 @@ public function register(Request $request)
             }
 
             // Cari admin berdasarkan email
-            $admin = DB::table('admin')->where('email', $request->email)->first(); // PERUBAHAN: 'admin'
+            $admin = DB::table('admin')->where('email', $request->email)->first();
 
             if (!$admin) {
                 return response()->json([
@@ -187,20 +191,22 @@ public function register(Request $request)
         }
     }
 
+    // -------------------------------------------------------------------------------- //
+
     /**
      * Get all admins
      */
     public function index()
     {
         try {
-            if (!Schema::hasTable('admin')) { // PERUBAHAN: 'admin'
+            if (!Schema::hasTable('admin')) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Tabel admin tidak tersedia'
                 ], 503);
             }
 
-            $admins = DB::table('admin') // PERUBAHAN: 'admin'
+            $admins = DB::table('admin')
                 ->select('id', 'nama', 'email', 'role', 'created_at', 'updated_at')
                 ->orderBy('id', 'desc')
                 ->get();
@@ -220,13 +226,15 @@ public function register(Request $request)
         }
     }
 
+    // -------------------------------------------------------------------------------- //
+
     /**
      * Get single admin by ID
      */
     public function show($id)
     {
         try {
-            $admin = DB::table('admin')->where('id', $id)->first(); // PERUBAHAN: 'admin'
+            $admin = DB::table('admin')->where('id', $id)->first();
 
             if (!$admin) {
                 return response()->json([
@@ -248,6 +256,8 @@ public function register(Request $request)
         }
     }
 
+    // -------------------------------------------------------------------------------- //
+
     /**
      * Update admin
      */
@@ -256,7 +266,7 @@ public function register(Request $request)
         try {
             $validator = Validator::make($request->all(), [
                 'nama' => 'sometimes|string|max:100',
-                'email' => 'sometimes|email|unique:admin,email,' . $id, // PERUBAHAN: 'admin'
+                'email' => 'sometimes|email|unique:admin,email,' . $id,
                 'password' => 'sometimes|string|min:6',
                 'role' => 'sometimes|in:admin,staff'
             ]);
@@ -284,9 +294,9 @@ public function register(Request $request)
             }
             $updateData['updated_at'] = now();
 
-            DB::table('admin')->where('id', $id)->update($updateData); // PERUBAHAN: 'admin'
+            DB::table('admin')->where('id', $id)->update($updateData);
 
-            $admin = DB::table('admin')->where('id', $id)->first(); // PERUBAHAN: 'admin'
+            $admin = DB::table('admin')->where('id', $id)->first();
 
             return response()->json([
                 'success' => true,
@@ -302,13 +312,15 @@ public function register(Request $request)
         }
     }
 
+    // -------------------------------------------------------------------------------- //
+
     /**
      * Delete admin
      */
     public function destroy($id)
     {
         try {
-            $admin = DB::table('admin')->where('id', $id)->first(); // PERUBAHAN: 'admin'
+            $admin = DB::table('admin')->where('id', $id)->first();
 
             if (!$admin) {
                 return response()->json([
@@ -317,7 +329,7 @@ public function register(Request $request)
                 ], 404);
             }
 
-            DB::table('admin')->where('id', $id)->delete(); // PERUBAHAN: 'admin'
+            DB::table('admin')->where('id', $id)->delete();
 
             return response()->json([
                 'success' => true,

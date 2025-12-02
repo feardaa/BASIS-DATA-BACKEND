@@ -4,10 +4,9 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Users; // Model untuk User
-use App\Models\Admin; // Model untuk Admin
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
-use Illuminate\Http\JsonResponse; // Tambahkan untuk tipe return
+use Illuminate\Http\JsonResponse;
 
 class AuthController extends Controller
 {
@@ -18,6 +17,7 @@ class AuthController extends Controller
             // Validasi Input
             $validatedData = $request->validate([
                 'nama' => 'required|string|max:100',
+                // Cek email unik di tabel 'users'
                 'email' => 'required|email|unique:users,email',
                 'password' => 'required|string|min:3',
                 'no_handphone' => 'required|string|max:15',
@@ -25,22 +25,27 @@ class AuthController extends Controller
             ]);
 
             // Buat User menggunakan Model Eloquent
+            // Data sudah masuk ke DB. Objek $user berisi data lengkap.
             $user = Users::create([
                 'nama' => $validatedData['nama'],
                 'email' => $validatedData['email'],
-                // Pastikan password di-hash saat registrasi!
+                // Password selalu di-hash
                 'password' => Hash::make($validatedData['password']),
                 'no_handphone' => $validatedData['no_handphone'],
                 'alamat' => $validatedData['alamat'],
             ]);
 
+            // Mengembalikan data user secara eksplisit
             return response()->json([
                 'success' => true,
                 'message' => 'Registrasi berhasil',
                 'data' => [
+                    // PENTING: Menggunakan Primary Key yang benar: id_users
                     'id' => $user->id_users,
                     'nama' => $user->nama,
                     'email' => $user->email,
+                    'no_handphone' => $user->no_handphone,
+                    'alamat' => $user->alamat,
                 ]
             ], 201);
 
@@ -69,7 +74,7 @@ class AuthController extends Controller
                 'password' => 'required|string'
             ]);
 
-            // Cari user
+            // Cari user: Menggunakan Model Eloquent
             $user = Users::where('email', $request->email)->first();
 
             // Cek user ditemukan DAN password cocok (menggunakan Hash::check)
@@ -85,6 +90,7 @@ class AuthController extends Controller
                 'success' => true,
                 'message' => 'Login berhasil!',
                 'data' => [
+                    // PENTING: Menggunakan Primary Key model: id_users
                     'id' => $user->id_users,
                     'nama' => $user->nama,
                     'email' => $user->email,

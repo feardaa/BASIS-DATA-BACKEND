@@ -11,6 +11,7 @@ class Users extends Authenticatable
     use HasFactory, Notifiable;
 
     protected $table = 'users';
+    // PENTING: Mendefinisikan Primary Key yang benar
     protected $primaryKey = 'id_users';
     public $timestamps = true;
 
