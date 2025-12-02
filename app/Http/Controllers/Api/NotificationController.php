@@ -24,7 +24,7 @@ class NotificationController extends Controller
         }
 
         $userId = Auth::id(); // Ambil ID user yang sedang login
-        
+
         $query = Notification::where('id_user', $userId)
             ->with('users'); // Memuat relasi user jika diperlukan
 
@@ -56,8 +56,8 @@ class NotificationController extends Controller
         }
 
         $notification = Notification::where('id_notif', $id_notif)
-                                    ->where('id_user', Auth::id()) // Pastikan hanya notifikasi miliknya
-                                    ->first();
+            ->where('id_user', Auth::id()) // Pastikan hanya notifikasi miliknya
+            ->first();
 
         if (!$notification) {
             return response()->json(['message' => 'Notifikasi tidak ditemukan.'], 404);
@@ -84,8 +84,8 @@ class NotificationController extends Controller
         }
 
         $notification = Notification::where('id_notif', $id_notif)
-                                    ->where('id_user', Auth::id())
-                                    ->first();
+            ->where('id_user', Auth::id())
+            ->first();
 
         if (!$notification) {
             return response()->json(['message' => 'Notifikasi tidak ditemukan.'], 404);
@@ -93,7 +93,7 @@ class NotificationController extends Controller
 
         // Cek apakah status sudah 1
         if ($notification->status == 1) {
-             return response()->json([
+            return response()->json([
                 'success' => true,
                 'data' => $notification,
                 'message' => 'Notifikasi sudah ditandai sebagai sudah dibaca.'
@@ -102,7 +102,7 @@ class NotificationController extends Controller
 
 
         // Update status menjadi sudah dibaca
-        $notification->status = 1; 
+        $notification->status = 1;
         $notification->save();
 
         return response()->json([
@@ -111,7 +111,7 @@ class NotificationController extends Controller
             'message' => 'Notifikasi berhasil ditandai sebagai sudah dibaca.'
         ], 200);
     }
-    
+
     /**
      * Menghapus satu notifikasi.
      *
@@ -125,8 +125,8 @@ class NotificationController extends Controller
         }
 
         $notification = Notification::where('id_notif', $id_notif)
-                                    ->where('id_user', Auth::id())
-                                    ->first();
+            ->where('id_user', Auth::id())
+            ->first();
 
         if (!$notification) {
             return response()->json(['message' => 'Notifikasi tidak ditemukan.'], 404);

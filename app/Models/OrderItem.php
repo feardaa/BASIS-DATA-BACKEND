@@ -3,11 +3,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\LaundryService;
 
 class OrderItem extends Model
 {
     use HasFactory;
-    
+
     // Nama tabel di database
     protected $table = 'order_item';
 
@@ -17,10 +18,10 @@ class OrderItem extends Model
 
     // Menambahkan timestamps karena OrderController akan menggunakannya
     public $timestamps = true;
-    
+
     protected $fillable = [
-        'id_order', 
-        'id_service', 
+        'id_order',
+        'id_service',
         'jumlah', // Digunakan jika satuan Layanan adalah 'per_pcs'
         'berat_kg', // Digunakan jika satuan Layanan adalah 'per_kg'
         'subtotal'

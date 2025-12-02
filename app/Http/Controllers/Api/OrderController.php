@@ -19,6 +19,8 @@ class OrderController extends Controller
 {
     /**
      * Mendapatkan daftar semua orders (Menggunakan Eloquent Relasi).
+     * Endpoint: GET /api/orders/all
+     * Middleware: auth:sanctum (Hanya untuk pengguna terotentikasi, idealnya Admin/Staff)
      *
      * @return JsonResponse
      */
@@ -26,181 +28,167 @@ class OrderController extends Controller
     {
         try {
             // Menggunakan Eloquent with() untuk eager loading relasi
-            $orders = Order::with('user:id_users,nama') // Hanya ambil id dan nama user
-                ->select('id_order', 'id_user', 'status', 'tanggal_pesan', 'tanggal_selesai', 'created_at', 'updated_at')
-                ->orderBy('tanggal_pesan', 'desc')
+            // Sesuaikan relasi (user, driver, items.service) dengan yang ada di Model Order Anda.
+            $orders = Order::with([
+                'user:id_users,nama,email', // Pilih kolom user yang ingin ditampilkan
+                'driver:id_driver,nama,no_handphone', // Pilih kolom driver
+                'items.service' // Ambil OrderItem dan detail LaundryService
+            ])
+                ->latest() // Mengambil yang terbaru lebih dulu
                 ->get();
 
-            // Transformasi data untuk menyesuaikan output
-            $formattedOrders = $orders->map(function ($order) {
-                return [
-                    'id_order' => $order->id_order,
-                    'customer_name' => $order->user->nama ?? 'N/A',
-                    'status' => $order->status,
-                    'tanggal_pesan' => $order->tanggal_pesan,
-                    'tanggal_selesai' => $order->tanggal_selesai,
-                    'created_at' => $order->created_at,
-                    'updated_at' => $order->updated_at,
-                ];
-            });
+            // Cek apakah ada orders
+            if ($orders->isEmpty()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Tidak ada data order ditemukan.',
+                    'data' => []
+                ], 200);
+            }
 
             return response()->json([
                 'success' => true,
-                'message' => 'Daftar Order berhasil diambil',
-                'data' => $formattedOrders
-            ]);
+                'message' => 'Daftar semua orders berhasil diambil.',
+                'total' => $orders->count(),
+                'data' => $orders
+            ], 200);
 
         } catch (\Exception $e) {
+            // Error 500 (Internal Server Error)
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal mengambil daftar order',
+                'message' => 'Gagal mengambil daftar orders.',
                 'error' => env('APP_DEBUG') ? $e->getMessage() : 'Terjadi kesalahan server'
             ], 500);
         }
     }
 
+    // ... method store(), show(), indexByUser(), updateStatus(), dan method lain di sini
+
     /**
-     * Membuat Order baru (Create/Store Order) menggunakan Transaction dan Eloquent.
-     *
-     * @param Request $request
-     * @return JsonResponse
+     * Membuat Order Baru (STORE).
+     * ... (Lanjutan kode Anda)
      */
     public function store(Request $request): JsonResponse
     {
-        // 1. Validasi Input
-        $validator = Validator::make($request->all(), [
-            'id_user' => 'required|integer|exists:users,id_users', 
-            'id_zone' => 'required|integer|exists:delivery_zones,id_zone',
-            'catatan' => 'nullable|string',
-            'tanggal_jemput' => 'nullable|date_format:Y-m-d H:i:s',
-            
-            // Validasi Items (minimum 1 item)
-            'items' => 'required|array|min:1',
-            'items.*.id_service' => 'required|integer|exists:laundry_services,id_service',
-            // Harus ada 'jumlah' (untuk satuan) atau 'berat_kg' (untuk kiloan)
-            'items.*.jumlah' => 'required_without:items.*.berat_kg|nullable|integer|min:1', 
-            'items.*.berat_kg' => 'required_without:items.*.jumlah|nullable|numeric|min:0.1', 
-            
-            // Validasi Pembayaran
-            'payment_method' => 'required|in:cash,transfer,ewallet',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validasi gagal',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
-        DB::beginTransaction();
-
+        // ... (Isi dari method store Anda yang sudah ada)
         try {
-            $totalAmount = 0;
-            $totalBerat = 0; 
-            $kategoriLaundry = [];
-            $orderItemsData = []; // Untuk menyimpan data item sebelum bulk insert
+            // Validasi input
+            $validatedData = Validator::make($request->all(), [
+                'id_user' => 'required|exists:users,id_users',
+                'id_driver' => 'nullable|exists:drivers,id_driver',
+                'id_zone' => 'required|exists:delivery_zones,id_zone',
+                'tanggal_pesan' => 'required|date',
+                'tanggal_selesai' => 'nullable|date|after_or_equal:tanggal_pesan',
+                'metode_pembayaran' => 'required|in:tunai,transfer',
+                'is_pickup_delivery' => 'required|boolean',
+                'alamat_detail' => 'nullable|string',
+                'total_berat' => 'nullable|numeric',
+                'catatan' => 'nullable|string',
+                'items' => 'required|array|min:1',
+                'items.*.id_service' => 'required|exists:laundry_services,id_service',
+                'items.*.kuantitas' => 'required|integer|min:1',
+            ])->validate();
 
-            // 2. Hitung Total Harga dan Kumpulkan Item
-            foreach ($request->items as $item) {
-                $service = LaundryService::find($item['id_service']); 
-                
-                // Cek ketersediaan layanan sudah dilakukan di validasi, ini untuk memastikan harga
-                $price = $service->harga; 
-                $qty = $item['jumlah'] ?? 0;
-                $weight = $item['berat_kg'] ?? 0.00;
-                $subtotal = 0;
-                
-                if ($weight > 0) {
-                    $subtotal = $price * $weight;
-                    $totalBerat += $weight;
-                    if (!in_array('kiloan', $kategoriLaundry)) { $kategoriLaundry[] = 'kiloan'; }
-                } else if ($qty > 0) {
-                    $subtotal = $price * $qty;
-                    if (!in_array('satuan', $kategoriLaundry)) { $kategoriLaundry[] = 'satuan'; }
-                } else {
-                    // Walaupun sudah divalidasi, ini untuk double check (harusnya tidak tercapai)
+            // Mulai transaksi database
+            DB::beginTransaction();
+
+            // 1. Hitung total harga item
+            $subtotal = 0;
+            $itemsData = [];
+
+            // Ambil semua service yang dibutuhkan
+            $serviceIds = collect($validatedData['items'])->pluck('id_service')->toArray();
+            $services = LaundryService::whereIn('id_service', $serviceIds)->get()->keyBy('id_service');
+
+            foreach ($validatedData['items'] as $item) {
+                $service = $services->get($item['id_service']);
+                if (!$service) {
                     DB::rollBack();
                     return response()->json([
                         'success' => false,
-                        'message' => 'Item layanan harus memiliki jumlah atau berat_kg.'
-                    ], 400);
+                        'message' => 'Layanan laundry tidak ditemukan.'
+                    ], 404);
                 }
 
-                $totalAmount += $subtotal;
-                
-                // Kumpulkan data order item
-                $orderItemsData[] = [
+                $hargaItem = $service->harga * $item['kuantitas'];
+                $subtotal += $hargaItem;
+
+                $itemsData[] = [
                     'id_service' => $item['id_service'],
-                    'jumlah' => $qty,
-                    'berat_kg' => $weight,
-                    'subtotal' => $subtotal,
-                    'created_at' => now(), // Tambahkan timestamp untuk bulk insert
-                    'updated_at' => now(), // Tambahkan timestamp untuk bulk insert
+                    'kuantitas' => $item['kuantitas'],
+                    'harga_per_unit' => $service->harga,
+                    'subtotal_item' => $hargaItem,
+                    'created_at' => now(),
+                    'updated_at' => now(),
                 ];
             }
-            
-            // 3. Ambil Ongkir
-            $zone = DeliveryZone::find($request->id_zone);
-            $ongkir = $zone->ongkir ?? 0;
-            $finalTotalAmount = $totalAmount + $ongkir;
 
-            // 4. Buat Entri Order
+            // 2. Ambil biaya delivery
+            $deliveryZone = DeliveryZone::find($validatedData['id_zone']);
+            $deliveryFee = $deliveryZone->biaya;
+
+            // 3. Hitung total order
+            $totalOrder = $subtotal + $deliveryFee;
+
+            // 4. Buat Order Baru
             $order = Order::create([
-                'id_user' => $request->id_user,
-                'id_zone' => $request->id_zone,
-                'id_driver' => null, 
-                'status' => 'menunggu', 
-                'tanggal_pesan' => now(),
-                'tanggal_jemput' => $request->tanggal_jemput ?? null,
-                'catatan' => $request->catatan ?? null,
-                'berat_total' => $totalBerat,
-                'kategori_laundry' => $kategoriLaundry, 
+                'id_user' => $validatedData['id_user'],
+                'id_driver' => $validatedData['id_driver'] ?? null,
+                'id_zone' => $validatedData['id_zone'],
+                'tanggal_pesan' => $validatedData['tanggal_pesan'],
+                'tanggal_selesai' => $validatedData['tanggal_selesai'] ?? null,
+                'status' => 'pending', // Default status saat order dibuat
+                'metode_pembayaran' => $validatedData['metode_pembayaran'],
+                'is_pickup_delivery' => $validatedData['is_pickup_delivery'],
+                'alamat_detail' => $validatedData['alamat_detail'] ?? null,
+                'total_berat' => $validatedData['total_berat'] ?? null,
+                'catatan' => $validatedData['catatan'] ?? null,
+                'subtotal' => $subtotal,
+                'biaya_delivery' => $deliveryFee,
+                'total_order' => $totalOrder,
             ]);
-            
-            $orderId = $order->id_order; 
-            
-            // 5. Buat Entri Order Item (Bulk Insert)
-            $finalOrderItems = [];
-            foreach ($orderItemsData as $item) {
-                // Tambahkan foreign key id_order ke setiap item
-                $finalOrderItems[] = array_merge($item, ['id_order' => $orderId]);
-            }
-            OrderItem::insert($finalOrderItems); 
-            
-            // 6. Buat Entri Payment
+
+            // 5. Simpan Item Order
+            $order->items()->createMany($itemsData);
+
+            // 6. Buat entri pembayaran
             Payment::create([
-                'id_order' => $orderId,
-                'metode' => $request->payment_method,
-                'jumlah' => $finalTotalAmount, 
-                'status' => 'belum_bayar', 
+                'id_order' => $order->id_order,
+                'tanggal_pembayaran' => null, // Pembayaran belum dilakukan
+                'jumlah_pembayaran' => $totalOrder,
+                'metode' => $validatedData['metode_pembayaran'],
+                'status_pembayaran' => 'belum_dibayar',
             ]);
 
             DB::commit();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Order berhasil dibuat',
-                'data' => [
-                    'id_order' => $orderId,
-                    'total_pembayaran' => $finalTotalAmount, 
-                    'ongkir' => $ongkir,
-                    'status' => 'menunggu'
-                ]
-            ], 201); 
+                'message' => 'Order berhasil dibuat!',
+                'data' => $order->load(['user', 'driver', 'items.service', 'payment'])
+            ], 201);
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $e->errors()
+            ], 422);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal membuat order. Terjadi kesalahan pada server.',
+                'message' => 'Order gagal dibuat',
                 'error' => env('APP_DEBUG') ? $e->getMessage() : 'Terjadi kesalahan server'
             ], 500);
         }
     }
 
+
     /**
-     * Menampilkan detail satu order (Menggunakan Eloquent Eager Loading).
+     * Mendapatkan detail Order (SHOW).
      *
      * @param int $id
      * @return JsonResponse
@@ -208,17 +196,9 @@ class OrderController extends Controller
     public function show(int $id): JsonResponse
     {
         try {
-            // Ambil Order dan semua relasinya dalam satu query
-            $order = Order::with([
-                'user:id_users,nama,no_handphone,alamat', 
-                'driver:id_driver,nama', 
-                'zone:id_zone,nama_zone,ongkir',
-                // Ambil Item dan layanan terkait (nama, harga)
-                'items.service:id_service,nama_service,harga', 
-                'payment',
-            ])
-            ->where('id_order', $id)
-            ->first();
+            // Menggunakan Eloquent find() dan with() untuk eager loading relasi
+            $order = Order::with(['user', 'driver', 'items.service', 'payment'])
+                ->find($id);
 
             if (!$order) {
                 return response()->json([
@@ -229,7 +209,7 @@ class OrderController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Detail Order berhasil diambil',
+                'message' => 'Detail order berhasil diambil',
                 'data' => $order
             ]);
 
@@ -242,29 +222,56 @@ class OrderController extends Controller
         }
     }
 
+
     /**
-     * Memperbarui status order dan menetapkan driver (UPDATE).
+     * Mendapatkan daftar Order untuk user tertentu (indexByUser).
+     *
+     * @param int $id_user
+     * @return JsonResponse
+     */
+    public function indexByUser(int $id_user): JsonResponse
+    {
+        try {
+            // Ambil semua orders untuk user tertentu, urutkan berdasarkan tanggal terbaru
+            $orders = Order::where('id_user', $id_user)
+                ->with(['items.service']) // Muat relasi item dan service
+                ->latest() // Urutkan dari yang terbaru
+                ->get();
+
+            if ($orders->isEmpty()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Tidak ada order ditemukan untuk user ini.',
+                    'data' => []
+                ], 200);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Daftar order user berhasil diambil.',
+                'data' => $orders
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil daftar order user.',
+                'error' => env('APP_DEBUG') ? $e->getMessage() : 'Terjadi kesalahan server'
+            ], 500);
+        }
+    }
+
+
+    /**
+     * Mengubah status Order (updateStatus).
      *
      * @param Request $request
      * @param int $id
      * @return JsonResponse
      */
-    public function update(Request $request, int $id): JsonResponse
+    public function updateStatus(Request $request, int $id): JsonResponse
     {
         try {
-            $validator = Validator::make($request->all(), [
-                'status' => 'nullable|in:menunggu,dijemput,diproses,selesai,dibatalkan',
-                'id_driver' => 'nullable|integer|exists:drivers,id_driver',
-            ]);
-
-            if ($validator->fails()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Validasi gagal',
-                    'errors' => $validator->errors()
-                ], 422);
-            }
-
             $order = Order::find($id);
 
             if (!$order) {
@@ -274,71 +281,25 @@ class OrderController extends Controller
                 ], 404);
             }
 
-            $updateData = [];
-            $messageParts = [];
+            // Validasi status baru
+            $validatedData = Validator::make($request->all(), [
+                'status' => 'required|in:pending,diterima,diproses,siap_diambil,perjalanan,selesai,dibatalkan',
+                'tanggal_selesai' => 'nullable|date', // Opsional, hanya diisi jika status = selesai
+            ])->validate();
 
-            // Logika Pembaruan Status
-            if ($request->has('status')) {
-                $status = $request->status;
-                $updateData['status'] = $status;
-                $messageParts[] = "Status diperbarui menjadi '{$status}'";
-
-                if ($status == 'selesai') {
-                    $updateData['tanggal_selesai'] = now();
-                }
+            // Update status dan tanggal selesai (jika ada)
+            $order->status = $validatedData['status'];
+            if ($validatedData['status'] === 'selesai' && !empty($validatedData['tanggal_selesai'])) {
+                $order->tanggal_selesai = $validatedData['tanggal_selesai'];
             }
 
-            // Logika Penugasan Driver
-            if ($request->has('id_driver')) {
-                $driverId = $request->id_driver;
+            $order->save();
 
-                // Cek apakah sudah ada driver (jika ingin menghindari re-assign)
-                if ($order->id_driver !== null && $order->id_driver != $driverId) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Order sudah memiliki driver yang ditetapkan. Harap batalkan atau ganti secara eksplisit.'
-                    ], 400);
-                }
-                
-                $currentStatus = $request->status ?? $order->status;
-                if ($currentStatus == 'menunggu') {
-                    $updateData['id_driver'] = $driverId;
-
-                    if (!isset($updateData['status'])) {
-                        // Otomatis ubah status menjadi dijemput saat driver ditetapkan
-                        $updateData['status'] = 'dijemput';
-                        $messageParts[] = "Status otomatis diubah menjadi 'dijemput'";
-                    }
-
-                    $messageParts[] = "Driver ID {$driverId} telah ditetapkan";
-
-                } else {
-                    return response()->json([
-                        'success' => false,
-                        'message' => "Driver hanya dapat ditetapkan pada order dengan status 'menunggu'. Status saat ini: {$currentStatus}"
-                    ], 400);
-                }
+            // Pesan notifikasi
+            $finalMessage = 'Status order berhasil diperbarui menjadi ' . $order->status;
+            if ($order->status === 'selesai') {
+                $finalMessage .= ' dan order telah selesai.';
             }
-            
-            // Logika Pembatalan Penugasan Driver (set id_driver = null)
-            if ($request->has('id_driver') && $request->id_driver === null) {
-                if ($order->id_driver !== null) {
-                    $updateData['id_driver'] = null;
-                    $messageParts[] = "Penugasan Driver dibatalkan";
-                }
-            }
-
-            if (empty($updateData)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Tidak ada data status atau driver yang diberikan untuk diperbarui.'
-                ], 400);
-            }
-
-            // Lakukan pembaruan
-            $order->update($updateData);
-
-            $finalMessage = "Order ID {$id} berhasil diperbarui. " . implode(' dan ', $messageParts);
 
             return response()->json([
                 'success' => true,
