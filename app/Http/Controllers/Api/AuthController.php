@@ -1,7 +1,7 @@
 <?php
+namespace App\Http\Controllers\Api;
 
-namespace App\Http\Controllers;
-
+use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Users; // Model untuk User
 use Illuminate\Support\Facades\Hash;
@@ -25,15 +25,20 @@ class AuthController extends Controller
             ]);
 
             // Buat User menggunakan Model Eloquent
-            // Data sudah masuk ke DB. Objek $user berisi data lengkap.
             $user = Users::create([
                 'nama' => $validatedData['nama'],
                 'email' => $validatedData['email'],
-                // Password selalu di-hash
+
+                // HANYA LAKUKAN HASH SEKALI di sini
                 'password' => Hash::make($validatedData['password']),
+
                 'no_handphone' => $validatedData['no_handphone'],
                 'alamat' => $validatedData['alamat'],
             ]);
+
+            // Generate token setelah registrasi berhasil
+            // Laravel Sanctum secara otomatis menggunakan primary key 'id_users' karena sudah didefinisikan di Model Users
+            $token = $user->createToken('authToken')->plainTextToken;
 
             // Mengembalikan data user secara eksplisit
             return response()->json([
@@ -46,6 +51,9 @@ class AuthController extends Controller
                     'email' => $user->email,
                     'no_handphone' => $user->no_handphone,
                     'alamat' => $user->alamat,
+
+                    'token' => $token, // Kirim token
+                    'token_type' => 'Bearer'
                 ]
             ], 201);
 
@@ -56,15 +64,16 @@ class AuthController extends Controller
                 'errors' => $e->errors()
             ], 422);
         } catch (\Exception $e) {
+            // Gunakan APP_DEBUG untuk menampilkan pesan error detail hanya saat debugging
             return response()->json([
                 'success' => false,
                 'message' => 'Registrasi gagal',
-                'error' => $e->getMessage()
+                'error' => env('APP_DEBUG') ? $e->getMessage() : 'Terjadi kesalahan server'
             ], 500);
         }
     }
 
-    // === METHOD LOGIN USER ===
+    // === METHOD LOGIN USER - DITAMBAH TOKEN GENERATION ===
     public function login(Request $request): JsonResponse
     {
         try {
@@ -77,7 +86,7 @@ class AuthController extends Controller
             // Cari user: Menggunakan Model Eloquent
             $user = Users::where('email', $request->email)->first();
 
-            // Cek user ditemukan DAN password cocok (menggunakan Hash::check)
+            // Cek user ditemukan DAN password cocok
             if (!$user || !Hash::check($request->password, $user->password)) {
                 return response()->json([
                     'success' => false,
@@ -85,17 +94,25 @@ class AuthController extends Controller
                 ], 401);
             }
 
+            // Hapus token lama untuk keamanan
+            $user->tokens()->delete();
+
+            // ** 🔑 GENERATE API TOKEN BARU **
+            $token = $user->createToken('authToken')->plainTextToken;
+
             // Login berhasil
             return response()->json([
                 'success' => true,
                 'message' => 'Login berhasil!',
                 'data' => [
-                    // PENTING: Menggunakan Primary Key model: id_users
+                    // Struktur data dirapikan, tidak ada duplikasi 'users'
                     'id' => $user->id_users,
                     'nama' => $user->nama,
                     'email' => $user->email,
                     'no_handphone' => $user->no_handphone,
-                    'alamat' => $user->alamat
+                    'alamat' => $user->alamat,
+                    'token' => $token, // Kirim token
+                    'token_type' => 'Bearer'
                 ]
             ]);
 
@@ -109,7 +126,32 @@ class AuthController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Login gagal',
-                'error' => $e->getMessage()
+                // Gunakan APP_DEBUG untuk menampilkan pesan error detail
+                'error' => env('APP_DEBUG') ? $e->getMessage() : 'Terjadi kesalahan server'
+            ], 500);
+        }
+    }
+
+    // === METHOD LOGOUT USER ===
+    public function logout(Request $request): JsonResponse
+    {
+        try {
+            // Mencabut token yang sedang digunakan (Current Token)
+            // Pastikan user terautentikasi sebelum memanggil user()
+            if ($request->user()) {
+                $request->user()->currentAccessToken()->delete();
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Logout berhasil'
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Logout gagal',
+                'error' => env('APP_DEBUG') ? $e->getMessage() : 'Terjadi kesalahan server'
             ], 500);
         }
     }

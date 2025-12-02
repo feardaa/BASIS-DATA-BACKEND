@@ -8,12 +8,17 @@ class Notification extends Model
 {
     protected $table = 'notifications';
     protected $primaryKey = 'id_notif';
-    public $timestamps = false;
+    public $timestamps = false; 
 
-    protected $fillable = ['id_user','pesan','status','created_at'];
+    // Hapus 'created_at' dari fillable.
+    protected $fillable = [
+        'id_user',
+        'pesan',
+        'status',
+    ];
 
-    public function user()
+    public function users()
     {
-        return $this->belongsTo(User::class, 'id_user', 'id_user');
+        return $this->belongsTo(Users::class, 'id_user', 'id_users'); 
     }
 }

@@ -10,6 +10,11 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             AdminSeeder::class,
+            DeliveryZonesSeeder::class,       // Tambahkan ini
+            DriversSeeder::class,             // Tambahkan ini
+            LaundrySeeder::class,             // Tambahkan ini
+            LaundryServiceSeeder::class,      // Tambahkan ini
+            ProductSeeder::class,             // Tambahkan ini
             // Seeder lainnya
         ]);
     }

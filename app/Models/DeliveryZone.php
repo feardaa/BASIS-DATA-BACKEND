@@ -11,11 +11,14 @@ class DeliveryZone extends Model
 
     protected $table = 'delivery_zones';
     protected $primaryKey = 'id_zone';
-    public $timestamps = false;
+    
+    // Harus TRUE (atau dihapus) agar sesuai dengan kolom created_at/updated_at di DB
+    public $timestamps = true; 
 
     protected $fillable = [
         'nama_zone',
         'ongkir',
+        'estimasi_jam', // Ditambahkan agar bisa di-POST/di-SEED
         'status'
     ];
 }

@@ -4,12 +4,15 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable; // Wajib untuk Notifikasi (Opsional)
+use Laravel\Sanctum\HasApiTokens; // Wajib untuk generate token API
 
 class Admin extends Authenticatable
 {
-    use HasFactory;
+    // Tambahkan trait Notifiable dan HasApiTokens agar bisa generate token
+    use HasFactory, Notifiable, HasApiTokens;
 
-    protected $table = 'admin'; // PERUBAHAN: 'admin' bukan 'admins'
+    protected $table = 'admin';
     protected $primaryKey = 'id';
     public $timestamps = true;
 
@@ -23,6 +26,12 @@ class Admin extends Authenticatable
     ];
 
     protected $hidden = [
-        'password'
+        'password',
+        'remember_token', // Ditambahkan untuk standar otentikasi
+    ];
+    
+    // Casting wajib: Hashing password secara otomatis
+    protected $casts = [
+        'password' => 'hashed', 
     ];
 }
