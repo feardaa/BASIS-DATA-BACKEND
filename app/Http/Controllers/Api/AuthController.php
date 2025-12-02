@@ -1,13 +1,13 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Users; // Model untuk User
-use App\Models\Admin; // Model untuk Admin
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
-use Illuminate\Http\JsonResponse; // Tambahkan untuk tipe return
+use Illuminate\Http\JsonResponse;
 
 class AuthController extends Controller
 {
@@ -28,11 +28,14 @@ class AuthController extends Controller
             $user = Users::create([
                 'nama' => $validatedData['nama'],
                 'email' => $validatedData['email'],
-                // Pastikan password di-hash saat registrasi!
-                'password' => Hash::make($validatedData['password']),
+                // Pastikan password di-hash. Jika Model Users menggunakan $casts, Hash::make tidak diperlukan.
+                'password' => $validatedData['password'], 
                 'no_handphone' => $validatedData['no_handphone'],
                 'alamat' => $validatedData['alamat'],
             ]);
+            
+            // Generate token setelah registrasi berhasil
+            $token = $user->createToken('authToken')->plainTextToken;
 
             return response()->json([
                 'success' => true,
@@ -41,6 +44,8 @@ class AuthController extends Controller
                     'id' => $user->id_users,
                     'nama' => $user->nama,
                     'email' => $user->email,
+                    'token' => $token, // Kirim token
+                    'token_type' => 'Bearer'
                 ]
             ], 201);
 
@@ -54,12 +59,12 @@ class AuthController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Registrasi gagal',
-                'error' => $e->getMessage()
+                'error' => env('APP_DEBUG') ? $e->getMessage() : 'Terjadi kesalahan server'
             ], 500);
         }
     }
 
-    // === METHOD LOGIN USER ===
+    // === METHOD LOGIN USER - DITAMBAH TOKEN GENERATION ===
     public function login(Request $request): JsonResponse
     {
         try {
@@ -72,24 +77,34 @@ class AuthController extends Controller
             // Cari user
             $user = Users::where('email', $request->email)->first();
 
-            // Cek user ditemukan DAN password cocok (menggunakan Hash::check)
+            // Cek user ditemukan DAN password cocok
             if (!$user || !Hash::check($request->password, $user->password)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Email atau password salah.'
                 ], 401);
             }
+            
+            // Hapus token lama untuk keamanan
+            $user->tokens()->delete(); 
+
+            // ** 🔑 GENERATE API TOKEN BARU (PENTING UNTUK FLUTTER) **
+            $token = $user->createToken('authToken')->plainTextToken;
 
             // Login berhasil
             return response()->json([
                 'success' => true,
                 'message' => 'Login berhasil!',
                 'data' => [
-                    'id' => $user->id_users,
-                    'nama' => $user->nama,
-                    'email' => $user->email,
-                    'no_handphone' => $user->no_handphone,
-                    'alamat' => $user->alamat
+                    'user' => [
+                        'id' => $user->id_users,
+                        'nama' => $user->nama,
+                        'email' => $user->email,
+                        'no_handphone' => $user->no_handphone,
+                        'alamat' => $user->alamat
+                    ],
+                    'token' => $token, // Kirim token ke Flutter
+                    'token_type' => 'Bearer'
                 ]
             ]);
 
@@ -103,8 +118,20 @@ class AuthController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Login gagal',
-                'error' => $e->getMessage()
+                'error' => env('APP_DEBUG') ? $e->getMessage() : 'Terjadi kesalahan server'
             ], 500);
         }
+    }
+    
+    // === METHOD LOGOUT USER ===
+    public function logout(Request $request): JsonResponse
+    {
+        // Mencabut token yang sedang digunakan (Current Token)
+        $request->user()->currentAccessToken()->delete(); 
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Logout berhasil'
+        ], 200);
     }
 }

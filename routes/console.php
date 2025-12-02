@@ -118,24 +118,24 @@ Route::get('/orders-with-details', function () {
         // Join user jika kolom nama ada
         if (in_array('nama', $userColumnNames)) {
             $query->leftJoin('user', 'orders.id_user', '=', 'user.id_user')
-                  ->addSelect('user.nama as customer_name');
+                ->addSelect('user.nama as customer_name');
         } elseif (in_array('name', $userColumnNames)) {
             $query->leftJoin('user', 'orders.id_user', '=', 'user.id')
-                  ->addSelect('user.name as customer_name');
+                ->addSelect('user.name as customer_name');
         }
         
         // Join drivers jika kolom nama ada
         if (in_array('nama', $driverColumnNames)) {
             $query->leftJoin('drivers', 'orders.id_driver', '=', 'drivers.id_driver')
-                  ->addSelect('drivers.nama as driver_name');
+                ->addSelect('drivers.nama as driver_name');
         } elseif (in_array('name', $driverColumnNames)) {
             $query->leftJoin('drivers', 'orders.id_driver', '=', 'drivers.id')
-                  ->addSelect('drivers.name as driver_name');
+                ->addSelect('drivers.name as driver_name');
         }
         
         $orders = $query->addSelect('orders.*')
-                       ->orderBy('orders.tanggal_pesan', 'desc')
-                       ->get();
+                    ->orderBy('orders.tanggal_pesan', 'desc')
+                    ->get();
 
         return response()->json([
             'success' => true,
