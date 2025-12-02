@@ -10,11 +10,10 @@ use Laravel\Sanctum\HasApiTokens;
 class Users extends Authenticatable
 {
     // Menggunakan trait untuk Factory, Notifikasi, dan API Tokens (Wajib untuk API/Otentikasi)
-    use HasApiTokens, HasFactory, Notifiable; 
+    use HasApiTokens, HasFactory, Notifiable;
 
     // Primary Key non-standar dan nama tabel
     protected $table = 'users';
-    // PENTING: Mendefinisikan Primary Key yang benar
     protected $primaryKey = 'id_users';
     public $timestamps = true;
 
@@ -44,9 +43,9 @@ class Users extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
         // Wajib: Menggunakan 'hashed' agar password di-hash secara otomatis saat disimpan
-        'password' => 'hashed', 
+        'password' => 'hashed',
     ];
-    
+
     /*
     |--------------------------------------------------------------------------
     | RELATIONS

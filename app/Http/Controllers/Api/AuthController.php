@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
@@ -17,7 +18,6 @@ class AuthController extends Controller
             // Validasi Input
             $validatedData = $request->validate([
                 'nama' => 'required|string|max:100',
-                // Cek email unik di tabel 'users'
                 'email' => 'required|email|unique:users,email',
                 'password' => 'required|string|min:3',
                 'no_handphone' => 'required|string|max:15',
@@ -28,30 +28,22 @@ class AuthController extends Controller
             $user = Users::create([
                 'nama' => $validatedData['nama'],
                 'email' => $validatedData['email'],
-
-                // HANYA LAKUKAN HASH SEKALI di sini
-                'password' => Hash::make($validatedData['password']),
-
+                // Pastikan password di-hash. Jika Model Users menggunakan $casts, Hash::make tidak diperlukan.
+                'password' => $validatedData['password'],
                 'no_handphone' => $validatedData['no_handphone'],
                 'alamat' => $validatedData['alamat'],
             ]);
 
             // Generate token setelah registrasi berhasil
-            // Laravel Sanctum secara otomatis menggunakan primary key 'id_users' karena sudah didefinisikan di Model Users
             $token = $user->createToken('authToken')->plainTextToken;
 
-            // Mengembalikan data user secara eksplisit
             return response()->json([
                 'success' => true,
                 'message' => 'Registrasi berhasil',
                 'data' => [
-                    // PENTING: Menggunakan Primary Key yang benar: id_users
                     'id' => $user->id_users,
                     'nama' => $user->nama,
                     'email' => $user->email,
-                    'no_handphone' => $user->no_handphone,
-                    'alamat' => $user->alamat,
-
                     'token' => $token, // Kirim token
                     'token_type' => 'Bearer'
                 ]
@@ -64,7 +56,6 @@ class AuthController extends Controller
                 'errors' => $e->errors()
             ], 422);
         } catch (\Exception $e) {
-            // Gunakan APP_DEBUG untuk menampilkan pesan error detail hanya saat debugging
             return response()->json([
                 'success' => false,
                 'message' => 'Registrasi gagal',
@@ -83,7 +74,7 @@ class AuthController extends Controller
                 'password' => 'required|string'
             ]);
 
-            // Cari user: Menggunakan Model Eloquent
+            // Cari user
             $user = Users::where('email', $request->email)->first();
 
             // Cek user ditemukan DAN password cocok
@@ -97,7 +88,7 @@ class AuthController extends Controller
             // Hapus token lama untuk keamanan
             $user->tokens()->delete();
 
-            // ** 🔑 GENERATE API TOKEN BARU **
+            // ** 🔑 GENERATE API TOKEN BARU (PENTING UNTUK FLUTTER) **
             $token = $user->createToken('authToken')->plainTextToken;
 
             // Login berhasil
@@ -105,13 +96,14 @@ class AuthController extends Controller
                 'success' => true,
                 'message' => 'Login berhasil!',
                 'data' => [
-                    // Struktur data dirapikan, tidak ada duplikasi 'users'
-                    'id' => $user->id_users,
-                    'nama' => $user->nama,
-                    'email' => $user->email,
-                    'no_handphone' => $user->no_handphone,
-                    'alamat' => $user->alamat,
-                    'token' => $token, // Kirim token
+                    'user' => [
+                        'id' => $user->id_users,
+                        'nama' => $user->nama,
+                        'email' => $user->email,
+                        'no_handphone' => $user->no_handphone,
+                        'alamat' => $user->alamat
+                    ],
+                    'token' => $token, // Kirim token ke Flutter
                     'token_type' => 'Bearer'
                 ]
             ]);
@@ -126,7 +118,6 @@ class AuthController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Login gagal',
-                // Gunakan APP_DEBUG untuk menampilkan pesan error detail
                 'error' => env('APP_DEBUG') ? $e->getMessage() : 'Terjadi kesalahan server'
             ], 500);
         }
@@ -135,24 +126,12 @@ class AuthController extends Controller
     // === METHOD LOGOUT USER ===
     public function logout(Request $request): JsonResponse
     {
-        try {
-            // Mencabut token yang sedang digunakan (Current Token)
-            // Pastikan user terautentikasi sebelum memanggil user()
-            if ($request->user()) {
-                $request->user()->currentAccessToken()->delete();
-            }
+        // Mencabut token yang sedang digunakan (Current Token)
+        $request->user()->currentAccessToken()->delete();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Logout berhasil'
-            ], 200);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Logout gagal',
-                'error' => env('APP_DEBUG') ? $e->getMessage() : 'Terjadi kesalahan server'
-            ], 500);
-        }
+        return response()->json([
+            'success' => true,
+            'message' => 'Logout berhasil'
+        ], 200);
     }
 }

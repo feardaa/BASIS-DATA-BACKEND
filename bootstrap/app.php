@@ -1,11 +1,4 @@
 <?php
-// Force file cache driver
-if (!isset($_ENV['CACHE_DRIVER'])) {
-    $_ENV['CACHE_DRIVER'] = 'file';
-    $_ENV['SESSION_DRIVER'] = 'file';
-    putenv('CACHE_DRIVER=file');
-    putenv('SESSION_DRIVER=file');
-}
 
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -19,7 +12,17 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        // Enable CORS untuk semua API routes
+        $middleware->api(prepend: [
+            \Illuminate\Http\Middleware\HandleCors::class,
+        ]);
+
+        // Disable CSRF untuk API
+        $middleware->validateCsrfTokens(except: [
+            'api/*',
+            'sanctum/csrf-cookie'
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        // Konfigurasi penanganan exception di sini
+        //
     })->create();
