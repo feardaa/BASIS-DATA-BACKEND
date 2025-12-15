@@ -1,14 +1,21 @@
 php:
   preset: laravel
+<<<<<<< HEAD
   version: 8
+=======
+>>>>>>> f060a5238c9be001064f299807a527823f9b6ff1
   disabled:
     - no_unused_imports
   finder:
     not-name:
       - index.php
+<<<<<<< HEAD
       - server.php
 js:
   finder:
     not-name:
       - webpack.mix.js
+=======
+js: true
+>>>>>>> f060a5238c9be001064f299807a527823f9b6ff1
 css: true

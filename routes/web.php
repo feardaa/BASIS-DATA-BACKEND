@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+<<<<<<< HEAD
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DetailTransaksiController;
 use App\Http\Controllers\FrontController;
@@ -11,12 +12,16 @@ use App\Http\Controllers\TransaksiController;
 use App\Models\DetailTransaksi;
 use App\Models\Transaksi;
 
+=======
+// routes/web.php
+>>>>>>> f060a5238c9be001064f299807a527823f9b6ff1
 /*
 |--------------------------------------------------------------------------
 | Web Routes
 |--------------------------------------------------------------------------
 |
 | Here is where you can register web routes for your application. These
+<<<<<<< HEAD
 | routes are loaded by the RouteServiceProvider within a group which
 | contains the "web" middleware group. Now create something great!
 |
@@ -102,3 +107,13 @@ Route::group(['prefix' => 'laundry', 'middleware' => ['auth']], function () {
 
     //Owner
 });
+=======
+| routes are loaded by the RouteServiceProvider and all of them will
+| be assigned to the "web" middleware group. Make something great!
+|
+*/
+
+Route::get('/', function () {
+    return view('welcome');
+});
+>>>>>>> f060a5238c9be001064f299807a527823f9b6ff1
